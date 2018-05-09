@@ -1,0 +1,209 @@
+#include <cassert>
+#include <atomic>
+#include <iostream>
+#include <thread>
+
+#include <signal.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <pthread.h>
+#include <sched.h>
+#include <string.h>
+
+#include "common/Console.h"
+#include "common/Config.h"
+#include "common/debug.h"
+#include "common/auxiliary.h"
+#include "Control.h"
+#include "Tid.h"
+#include "Logger.h"
+#include "Executor.h"
+#include "Utils.h"
+#include "CallCtx.h"
+
+extern Executor *exe;
+
+
+extern "C" {
+
+bool need_tracing() {
+    return Control::isStarted() && !Control::isFinished() && !Tid::isMetaThread();
+}
+
+#define DO_INSTRUMENT(stmt)           \
+    do {                              \
+        if (need_tracing()) { stmt; } \
+    } while(false)
+
+/////////////////////////////////////////////////
+void _before_exit() {
+    static bool has_clean_up = false;
+    if (!need_tracing()) {
+        return;
+    }
+
+    if (has_clean_up)
+        return;
+    has_clean_up = true;
+    Control::setFinished();
+    exe->programExit();
+}
+
+void exit_handler(int) {
+    _before_exit();
+    exit(0);
+}
+
+void _before_main() {
+    Control::setStarted();
+
+    if (std::atexit(_before_exit) != 0) {
+        Console::err("Registration atexit failed\n");
+        exit(0);
+    }
+
+    // To change the thread id dispatcher,
+    // we must register each thread created.
+    Tid::registerCurrThread();
+
+    exe->programStart();
+    exe->threadStart();
+}
+
+//-----------------------------------------------
+
+void _before_load(uint64_t inst_id, void *var_addr) {
+    DO_INSTRUMENT(exe->beforeLoad(inst_id, var_addr));
+    Control::incGlobalTick();
+}
+
+void _after_load(uint64_t inst_id, void *var_addr) {
+    DO_INSTRUMENT(exe->afterLoad(inst_id, var_addr));
+}
+
+//-----------------------------------------------
+
+void _before_store(uint64_t inst_id, void *var_addr) {
+    DO_INSTRUMENT(exe->beforeStore(inst_id, var_addr));
+    Control::incGlobalTick();
+}
+
+void _after_store(uint64_t inst_id, void *var_addr) {
+    DO_INSTRUMENT(exe->afterStore(inst_id, var_addr));
+}
+
+void _before_func_call(uint64_t inst_id) {
+    CallCtx::pushCaller(inst_id);
+    DO_INSTRUMENT(exe->beforeFuncCall(inst_id));
+}
+
+void _after_func_call(uint64_t inst_id) {
+    CallCtx::popCaller(inst_id);
+    DO_INSTRUMENT(exe->afterFuncCall(inst_id));
+}
+
+void _enter_func(uint64_t func_id) {
+    UNUSED(func_id);
+    // CallCtx::pushFunction(func_id);
+}
+
+void _exit_func(uint64_t func_id) {
+    UNUSED(func_id);
+    // CallCtx::popFunction(func_id);
+}
+
+//-----------------------------------------------
+
+typedef void* (*thread_routine_t)(void*);
+
+struct new_thread_args_pack_t {
+    thread_routine_t routine_;
+    void *arg_;
+    std::atomic<tid_t> tid_;
+};
+
+void *new_thread_start_stub(void *arg) {
+    tid_t my_tid = Tid::getNewTid();
+    new_thread_args_pack_t *pack = (new_thread_args_pack_t *)arg;
+    pack->tid_.store(my_tid, std::memory_order_seq_cst);
+
+    // Console::info("Thread Start Stub\n");
+
+    DO_INSTRUMENT(exe->threadStart());
+    void *ret = pack->routine_(pack->arg_);
+    DO_INSTRUMENT(exe->threadExit());
+    Tid::unregisterCurrThread();
+    return ret;
+}
+
+int pthread_create_wrapper(uint64_t inst_id, pthread_t *thread, pthread_attr_t *attr,
+                           thread_routine_t routine, void *arg) {
+
+    static bool dump_create = Config::getRuntimeConfig()->getBool("DUMP_CREATE");
+    if (dump_create) {
+        Debug::dumpThreadStacktrace(0);
+    }
+    Control::incGlobalTick();
+    DO_INSTRUMENT(exe->beforePthreadCreate(inst_id, thread));
+    // =============== NOTICE ==========
+    // Yoooo, we never delete this pack.
+    // Let it leak.
+    // =================================
+    new_thread_args_pack_t *pack =
+        (new_thread_args_pack_t *)malloc(sizeof(new_thread_args_pack_t));
+
+    pack->routine_ = routine;
+    pack->arg_ = arg;
+    pack->tid_ = UNDEFINED_TID;
+
+    int ret = pthread_create(thread, attr, new_thread_start_stub, pack);
+
+    // Spawn thread will register itself and write pack->tid_
+    while (pack->tid_.load(std::memory_order_seq_cst) == UNDEFINED_TID) {
+        pthread_yield();
+    }
+
+    DO_INSTRUMENT(exe->afterPthreadCreate(inst_id, pack->tid_));
+    return ret;
+}
+
+void  pthread_exit_wrapper(uint64_t inst_id, void *arg) {
+    UNUSED(inst_id);
+    DO_INSTRUMENT(exe->threadExit());
+    pthread_exit(arg);
+}
+
+//-----------------------------------------------
+
+int pthread_join_wrapper(uint64_t inst_id, pthread_t t, void **arg) {
+    Control::incGlobalTick();
+
+    tid_t remote_tid = Tid::lookupTid(t);
+    DO_INSTRUMENT(exe->beforePthreadJoin(inst_id, remote_tid));
+
+    int ret = pthread_join(t, arg);
+
+    DO_INSTRUMENT(exe->afterPthreadJoin(inst_id, remote_tid));
+    return ret;
+}
+
+//-----------------------------------------------
+
+void free_wrapper(uint64_t inst_id, void *ptr) {
+    static bool free_mem = Config::getRuntimeConfig()->getBool("FREE_MEM");
+    if (free_mem) {
+        DO_INSTRUMENT(exe->beforeFree(inst_id, ptr));
+        free(ptr);
+        DO_INSTRUMENT(exe->afterFree(inst_id, ptr));
+    }
+}
+
+void _after_fork(uint64_t inst_id, int pid) {
+    DO_INSTRUMENT(exe->afterFork(inst_id, pid));
+}
+
+//-----------------------------------------------
+
+{{ wrap_funcs }}
+
+}

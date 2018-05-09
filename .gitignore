@@ -1,0 +1,13 @@
+*.bc
+*.pyc
+*.o
+*.d
+bin/*
+bak/
+benchmarks
+logs/*/srcinfo
+logs/*/detect
+logs/*/summary
+logs/*/check
+logs/*.race
+dat

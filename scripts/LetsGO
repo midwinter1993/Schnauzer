@@ -1,0 +1,500 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+"""Oops
+
+Usage:
+    LetsGO prof_analyze <log_dir>
+    LetsGO dlocate <race_file>
+    LetsGO memcheck <mem_trace_file> <addr>
+\
+    LetsGO settle <benchmark_dir>
+    LetsGO detect <detect_dir> <sched>
+\
+    LetsGO racesum <detect_dir> <sched>
+    LetsGO showsum <detect_dir> <sched>
+    LetsGO clean <detect_dir> <sched>
+    LetsGO disclean <detect_dir> <sched>
+    LetsGO racediff <tot_race_dir>
+    LetsGO showrace <tot_race_fpath>
+    LetsGO plot <summary_dir>
+\
+    LetsGO chglib <runtime_lib_name>
+    LetsGO check <log_dir> <race_pair>
+    LetsGO count
+    LetsGO tree
+    LetsGO ls <detect_dir>
+    LetsGO (-h | --help)
+    LetsGO --version
+\
+Options:
+    -h --help     Show this screen.
+    -v --version  Show version.
+"""
+
+import docopt
+import jinja2
+import re
+import os
+import stat
+import signal
+import sys
+import errno
+from collections import defaultdict
+
+from utils import list_dir
+from utils import shell_exec
+from utils import rm_file
+from utils import ROOT_DIR
+from utils import current_time
+from utils import yaml_load
+from utils import yaml_dump
+from utils import extend_list
+
+from Command import CommandTable
+
+from Race import RaceDetector
+from Race import RaceFile
+from Race import InstRace
+from Race import RaceFileManager
+from MemTrace import MemTrace
+from SrcInfo import SrcInfoDB
+
+import matplotlib.pyplot as plt
+import subprocess
+
+cmd_table = CommandTable()
+
+
+def set_env(arguments):
+    dirs = None
+    for k in ('<race_file>', '<detect_dir>',
+              '<mem_trace_file>', '<tot_race_fpath>'):
+        if arguments[k]:
+            dirs = arguments[k].split('/')
+
+    if dirs:
+        #  logs/benchmark-name/...
+        idx = dirs.index('logs')
+        d = '/'.join(dirs[0:idx+2])
+        os.environ['LN_CONFIG'] = os.path.join(ROOT_DIR, d, 'LN.yaml')
+        os.environ['SRCINFO_DB'] = os.path.join(ROOT_DIR, d, 'srcinfo/info.db')
+
+
+@cmd_table.collect
+def prof_analyze(arguments):
+    os.environ['PSET_SIZE'] = '1'
+    log_dir = arguments['<log_dir>']
+    profile_dir = os.path.join(log_dir, 'profile')
+
+    if not os.path.exists(profile_dir):
+        print 'Profile dir %s not exists' % profile_dir
+
+    rm_file(os.path.join(profile_dir, 'PCT'))
+    rm_file(os.path.join(profile_dir, 'Prace'))
+    rm_file(os.path.join(profile_dir, 'InstPoint'))
+
+    bin = os.path.join(ROOT_DIR, 'bin/prof_analyze')
+    for f in list_dir(profile_dir, ext='.trace'):
+        shell_exec('%s %s' % (bin, f))
+
+
+@cmd_table.collect
+def detect(arguments):
+    detect_dir = arguments['<detect_dir>']
+    sched = arguments['<sched>']
+
+    assert check_sched(sched)
+
+    detector = RaceDetector()
+    detector.detect(detect_dir, sched)
+
+
+@cmd_table.collect
+def dlocate(arguments):
+    race_file = RaceFile(arguments['<race_file>'])
+    race_file.showSrcInfo()
+
+
+@cmd_table.collect
+def memcheck(arguments):
+    mem_trace_file = arguments['<mem_trace_file>']
+    addr = arguments['<addr>']
+    mem_trace = MemTrace(mem_trace_file)
+    if addr == 'all':
+        mem_trace.showAllTrace()
+    else:
+        mem_trace.checkAddr(int(addr))
+
+
+@cmd_table.collect
+def count(*dummy):
+    # Count lines
+    p1 = subprocess.Popen(
+        ['find', 'analyze', 'runtime', 'common', 'llvm', '-name', '*.cpp'],
+        stdout=subprocess.PIPE)
+    p2 = subprocess.Popen(
+        ['xargs', 'grep', '-vc', '^$'],
+        stdin=p1.stdout,
+        stdout=subprocess.PIPE)
+
+    out, err = p2.communicate()
+
+    nr_lines = 0
+    for line in out.split():
+        print line
+        nr_lines += int(line.split(':')[1])
+    print '----\nTotal lines: ', nr_lines
+
+
+@cmd_table.collect
+def tree(*dummy):
+    shell_exec("tree -I 'bak|benchmarks|*.o|*.d|bin|logs'")
+
+
+def change_runtime_lib(lib_name):
+    os.chdir('bin')
+    lib_path = 'lib' + lib_name + '.so'
+    if not os.path.exists(lib_path):
+        print 'Runtime lib:', lib_path, 'not exists'
+        return
+    target_lib_path = 'libruntime.so'
+    if os.path.exists(target_lib_path) and os.path.islink(target_lib_path):
+        print 'Update runtime lib link'
+        shell_exec('ln -sf %s %s' % (lib_path, target_lib_path))
+    else:
+        print 'Create runtime lib link'
+        shell_exec('ln -s %s %s' % (lib_path, target_lib_path))
+
+
+@cmd_table.collect
+def chglib(arguments):
+    runtime_lib_name = arguments['<runtime_lib_name>'].lower()
+    change_runtime_lib(runtime_lib_name)
+
+
+@cmd_table.collect
+def settle(arguments):
+    def load_template(template_path):
+        with open(template_path, 'r') as fp:
+            return jinja2.Template(fp.read())
+
+    benchmark_dir = arguments['<benchmark_dir>']
+    if benchmark_dir[-1] == '/':
+        benchmark_dir = benchmark_dir[:-1]
+    benchmark_name = benchmark_dir.split('/')[-1]
+
+    PROJ_DIR = os.path.abspath(os.curdir)
+    LOG_DIR = os.path.join(PROJ_DIR, 'logs')
+    benchmark_log_dir = os.path.join(LOG_DIR, benchmark_name)
+    LN_CONFIG = os.path.join(benchmark_log_dir, 'LN.yaml')
+
+    if not os.path.exists(benchmark_log_dir):
+        shell_exec('mkdir %s' % benchmark_log_dir)
+        print 'Create benchmark log dir', benchmark_log_dir
+
+        with open(LN_CONFIG, 'w') as fp:
+            template = load_template(
+                os.path.join(PROJ_DIR, 'scripts/LN_config.template'))
+            fp.write(
+                template.render(
+                    BENCHMARK_NAME=benchmark_name, LOG_DIR=LOG_DIR))
+
+    compile_script = os.path.join(PROJ_DIR, 'scripts/COMPILE')
+    with open(compile_script, 'w') as fp:
+        template = load_template(
+            os.path.join(PROJ_DIR, 'scripts/COMPILE.template'))
+        fp.write(
+            template.render(PROJ_DIR=PROJ_DIR, LN_CONFIG=LN_CONFIG))
+    st = os.stat(compile_script)
+    os.chmod(compile_script, st.st_mode | stat.S_IEXEC)
+
+    shell_exec('./scripts/benchmarkSettle.sh %s' % benchmark_dir)
+
+
+def summary_path(detect_dir, sched):
+    summary_dir = detect_dir.replace('/detect', '/summary')
+
+    if not os.path.exists(summary_dir):
+        os.makedirs(summary_dir)
+    for f in list_dir(detect_dir, ext='.race'):
+        # tmp: [prog_name, date, time, sched_name]
+        tmp = os.path.splitext(os.path.basename(f))[0].split('_')
+        if  sched is not None:
+            tot_race_fpath = '%s_%s' % (tmp[0], sched)
+        else:
+            tot_race_fpath = '%s_%s' % (tmp[0], tmp[3])
+        return os.path.join(summary_dir, tot_race_fpath)
+
+
+def check_sched(sched):
+    if sched not in ('PCT', 'SCS', 'NORMAL', 'PROFILE'):
+        print 'Unknown scheduler', sched
+        return False
+    return True
+
+
+@cmd_table.collect
+def racesum(arguments):
+    detect_dir = arguments['<detect_dir>']
+    sched = arguments['<sched>']
+
+    assert check_sched(sched)
+
+    detector = RaceDetector()
+    detector.detect(detect_dir, sched)
+
+    rf_mngr = RaceFileManager()
+    rf_mngr.loadTotalRaceFile(detect_dir, sched)
+    rf_mngr.saveInfo(summary_path(detect_dir, sched))
+
+    #  ratio = 0.5
+    #  threshold = int(len(tot_race_file) * ratio)
+    threshold = 2
+    #  nr_common_race = rf_mngr.filterCommonRace(threshold)
+
+    # Dump diff race for each race file
+    #  rf_mngr.showSummary()
+
+    print '-----', sched, '-----'
+    #  print 'COMMON RACE:', nr_common_race
+    print '#TOTAL RACE FILE:', rf_mngr.nrRaceFile()
+    #  print 'THRESHOLD:', threshold
+
+
+@cmd_table.collect
+def showsum(arguments):
+    detect_dir = arguments['<detect_dir>']
+    sched = arguments['<sched>']
+
+    assert check_sched(sched)
+
+    rf_mngr = RaceFileManager()
+    rf_mngr.loadTotalRaceFile(detect_dir, sched)
+    rf_mngr.saveInfo(summary_path(detect_dir, sched))
+
+    #  print len(rf_mngr.nrAccDistinctRaceEachFile())
+    #  print len(rf_mngr.nrDistinctRaceEachFile())
+
+    if not os.environ.get('DISPLAY'):
+        print rf_mngr.nrDistinctRaceEachFile()
+        return
+
+    fig = plt.figure(sched)
+    plt.plot(rf_mngr.nrAccDistinctRaceEachFile(), label='# of Acc Race', marker='^')
+    plt.plot(rf_mngr.nrDistinctRaceEachFile(), label='# of Distinct Race', marker='o')
+    plt.plot(rf_mngr.nrNormalRaceEachFile(), label='# of Normal Race', marker='s')
+    plt.plot(rf_mngr.nrTotalRaceEachFile(), label='# of Total Race', marker='p')
+    #  print rf_mngr.nrDistinctRaceEachFile()
+    #  print rf_mngr.nrNormalRaceEachFile()
+    #  print rf_mngr.nrTotalRaceEachFile()
+    plt.ylabel('#Inst Race')
+    plt.legend(loc='best')
+
+    benchmark_name = detect_dir.split('/')[1]
+    #  plt.savefig('./bak/%s_%s_%s.png' % (current_time(), benchmark_name, sched))
+
+    plt.show()
+
+
+@cmd_table.collect
+def clean(arguments):
+    detect_dir = arguments['<detect_dir>']
+    sched = arguments['<sched>']
+
+    assert check_sched(sched)
+
+    for trace_file in list_dir(detect_dir, ext='.trace'):
+        if sched not in trace_file:
+            continue
+        os.remove(trace_file)
+
+
+@cmd_table.collect
+def disclean(arguments):
+    detect_dir = arguments['<detect_dir>']
+    sched = arguments['<sched>']
+
+    assert check_sched(sched)
+
+    clean(arguments)
+
+    for f in list_dir(detect_dir):
+        if sched not in f:
+            continue
+        if f.endswith('.race') or f.endswith('.race-summary') or f.endswith('.trace'):
+            os.remove(f)
+
+
+@cmd_table.collect
+def showrace(arguments):
+    tot_race_fpath = arguments['<tot_race_fpath>']
+    db = SrcInfoDB()
+    with open(tot_race_fpath, 'r') as fd:
+        for line in fd:
+            inst_race = InstRace.parse(line)
+
+            print inst_race
+
+            src_info_1 = db.lookup(inst_race.first_inst_id_)
+            src_info_2 = db.lookup(inst_race.second_inst_id_)
+
+            print '=' * 90
+            print inst_race.first_inst_id_, src_info_1,
+            print '  X  ',
+            print inst_race.second_inst_id_, src_info_2
+            print '=' * 90
+
+
+@cmd_table.collect
+def racediff(arguments):
+    tot_race_dir = arguments['<tot_race_dir>']
+
+    pct_inst_race_set = set()
+    scs_inst_race_set = set()
+    for f in list_dir(tot_race_dir, ext='.tot-race'):
+        if 'PCT' in f:
+            s = pct_inst_race_set
+        elif 'SCS' in f:
+            s = scs_inst_race_set
+        elif 'NORMAL' in f:
+            continue
+        else:
+            print 'Error: Unknown tot inst race'
+            return
+        with open(f, 'r') as fd:
+            for line in fd:
+                s.add(InstRace.parse(line))
+
+    diff_1 = scs_inst_race_set - pct_inst_race_set
+    diff_2 = pct_inst_race_set - scs_inst_race_set
+    print 'SCS', len(scs_inst_race_set)
+    print 'PCT', len(pct_inst_race_set)
+    print 'SCS - PCT', len(diff_1)
+    print 'PCT - SCS', len(diff_2)
+
+
+def plot_data(data, *args, **kargs):
+    plt.plot(range(1, len(data)+1), data, **kargs)
+
+
+@cmd_table.collect
+def plot(arguments):
+    summary_dir = arguments['<summary_dir>']
+    arguments['<detect_dir>'] = summary_dir.replace('summary', 'detect')
+
+    #  for sched in ('SCS', 'PCT', 'NORMAL'):
+    for sched in ('SCS', 'PCT'):
+        arguments['<sched>'] = sched
+        racesum(arguments)
+
+    for f in list_dir(summary_dir, ext='.tot-summary'):
+            if 'PCT' in f:
+                pct_tot_summary = yaml_load(f)
+            elif 'SCS' in f:
+                scs_tot_summary = yaml_load(f)
+            elif 'NORMAL' in f:
+                normal_tot_summary = yaml_load(f)
+            else:
+                print f
+                assert False
+
+    #  if not os.environ.get('DISPLAY'):
+        #  print 'SCS', scs_tot_summary['nr-total-race']
+        #  print 'PCT', pct_tot_summary['nr-total-race']
+        #  return
+
+    fig_name = summary_dir.split('/')[1]
+    ##########################################################
+    #  fig = plt.figure(fig_name, figsize=(19.2, 9.8), dpi=100)
+
+    #  plt.subplot(121)
+    #  plot_data(scs_tot_summary['nr-total-race'], label='SCS', marker='^')
+    #  plot_data(pct_tot_summary['nr-total-race'], label='PCT', marker='o')
+    #  #  plot_data(normal_tot_summary['nr-total-race'], label='NORMAL', marker='s')
+
+    #  plt.title('Total race')
+    #  plt.xlabel('# of Trace')
+    #  plt.ylabel('# of Inst Race')
+    #  plt.legend(loc='best')
+
+    #  plt.subplot(122)
+    #  plot_data(scs_tot_summary['nr-acc-distinct-race'], label='SCS', marker='^')
+    #  plot_data(pct_tot_summary['nr-acc-distinct-race'], label='PCT', marker='o')
+    #  #  plot_data(normal_tot_summary['nr-acc-distinct-race'], label='NORMAL', marker='s')
+
+    #  plt.title('Acc distinct race')
+    #  plt.xlabel('# of Trace')
+    #  plt.ylabel('# of Inst Race')
+    #  plt.legend(loc='best')
+
+    #  #  plt.savefig('./plots/%s_%s_SCS-vs-PCT.png' % (current_time(), fig_name))
+    #  plt.show()
+    ##########################################################
+
+    with open('./plots/%s_%s.dat' % (fig_name, current_time()), 'w') as fd:
+        s = '%5s %20s %30s %20s %30s' % ('num', 'scs-total-race',
+                                         'scs-acc-distinct-race',
+                                         'pct-total-race',
+                                         'pct-acc-distinct-race')
+        fd.write(s);
+        fd.write('\n')
+        l = max(len(scs_tot_summary['nr-total-race']),
+                len(scs_tot_summary['nr-acc-distinct-race']),
+                len(pct_tot_summary['nr-total-race']),
+                len(pct_tot_summary['nr-acc-distinct-race']))
+
+        extend_list(scs_tot_summary['nr-total-race'], l)
+        extend_list(scs_tot_summary['nr-acc-distinct-race'], l)
+        extend_list(pct_tot_summary['nr-total-race'], l)
+        extend_list(pct_tot_summary['nr-acc-distinct-race'], l)
+
+        for i in xrange(l):
+            s = '%5d %20d %30d %20d %30d' % (
+                i,
+                scs_tot_summary['nr-total-race'][i],
+                scs_tot_summary['nr-acc-distinct-race'][i],
+                pct_tot_summary['nr-total-race'][i],
+                pct_tot_summary['nr-acc-distinct-race'][i])
+            fd.write(s);
+            fd.write('\n')
+            #  print s
+
+
+@cmd_table.collect
+def check(arguments):
+    log_dir = arguments['<log_dir>']
+    race_pair = arguments['<race_pair>']
+
+    first, second = re.findall(r'\d+', race_pair)
+
+    target_race_file = os.path.join(log_dir, 'check/target.race')
+    with open(target_race_file, 'w') as fd:
+        fd.write('%s %s' % (first, second))
+        print 'Target: %s %s' % (first, second)
+
+    #  change_runtime_lib('check')
+
+@cmd_table.collect
+def ls(arguments):
+    detect_dir= arguments['<detect_dir>']
+    d = {
+        'SCS.trace':    0,
+        'SCS.race':     0,
+        'PCT.trace':    0,
+        'PCT.race':     0,
+        'NORMAL.trace': 0,
+        'NORMAL.race':  0
+    }
+    for f in list_dir(detect_dir):
+        for k in d:
+            if f.endswith(k):
+                d[k] += 1
+    for k, v in d.iteritems():
+        print '%-20s %d' % (k.replace('.', ' '), v)
+
+
+if __name__ == "__main__":
+    arguments = docopt.docopt(__doc__, version='Oops 0.0.0')
+
+    set_env(arguments)
+    cmd_table.run(arguments)

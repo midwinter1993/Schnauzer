@@ -1,0 +1,2 @@
+ln -s {path-to-Schnauzer-dir}/scripts/control.py ./control.py
+./control.py sys ./trigger.sh {path-to-Schnauzer-dir}/logs/pbzip2-0.9.4/LN.yaml -t 3

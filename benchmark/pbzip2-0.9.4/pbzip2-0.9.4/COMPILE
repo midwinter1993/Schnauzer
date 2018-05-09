@@ -1,0 +1,18 @@
+#!/bin/bash
+
+export CONFIGURE=" "
+export PROJ_DIR={path-to-Schnauzer-dir}
+export CXX=$PROJ_DIR/scripts/MYCXX
+export CC=$CXX
+INSTALL_DIR="/tmp"
+
+
+if [[ -e ./configure ]]; then
+    ./configure --prefix=$INSTALL_DIR
+    if [[ $? -ne 0 ]]; then exit; fi
+fi
+
+unset CONFIGURE
+make
+
+if [[ $? -ne 0 ]]; then exit; fi

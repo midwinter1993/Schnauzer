@@ -1,0 +1,45 @@
+#ifndef __RUNTIME_CORE_EXECUTOR_H__
+#define __RUNTIME_CORE_EXECUTOR_H__
+
+#include <cstdint>
+#include <string>
+#include "common/basic.h"
+
+class Executor {
+public:
+    Executor() { }
+    virtual ~Executor() { }
+    //-----------------------------------------------
+    virtual void programStart() { }
+    virtual void programExit() { }
+    //-----------------------------------------------
+    virtual void threadStart() { }
+    virtual void threadExit() { }
+    //-----------------------------------------------
+    virtual void beforeLoad(instID_t inst_id, void *var_addr) { }
+    virtual void afterLoad(instID_t inst_id, void *var_addr) { }
+    //-----------------------------------------------
+    virtual void beforeStore(instID_t inst_id, void *var_addr) { }
+    virtual void afterStore(instID_t inst_id, void *var_addr) { }
+    //-----------------------------------------------
+    virtual void beforeFuncCall(instID_t inst_id) { }
+    virtual void afterFuncCall(instID_t inst_id) { }
+    //-----------------------------------------------
+    // Before thread creating, tid has not been assigned.
+    virtual void beforePthreadCreate(instID_t inst_id, pthread_t *tid_ptr) { }
+    virtual void afterPthreadCreate(instID_t inst_id, tid_t t) { }
+    //-----------------------------------------------
+    // virtual void beforePthreadExit(instID_t inst_id) { }
+    //-----------------------------------------------
+    virtual void beforePthreadJoin(instID_t inst_id, tid_t t) { }
+    virtual void afterPthreadJoin(instID_t inst_id, tid_t t) { }
+    //-----------------------------------------------
+    virtual void afterFork(instID_t inst_id, int pid) { }
+    //-----------------------------------------------
+    virtual void beforeFree(instID_t inst_id, void *addr) { }
+    virtual void afterFree(instID_t inst_id, void *addr) { }
+    //-----------------------------------------------
+{{ instr_funcs }}
+};
+
+#endif /* ifndef __RUNTIME_CORE_EXECUTOR_H__ */
