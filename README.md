@@ -1,20 +1,25 @@
-Schnauzer
+Schnauzer: A testing tool suit for multithreaded programs.
 ---
-# A testing tool suit for multithreaded programs.
 
 ## Usage step by step
 
 #### Clone the repo
 
-`git clone git@github.com:midwinter1993/Schnauzer.git`
+```bash
+git clone git@github.com:midwinter1993/Schnauzer.git
+```
 
 #### Set env variable
 
-`export Schnauzer=`pwd` `
+```bash
+export Schnauzer=`pwd`
+```
 
 #### Install clang/llvm
 
-`sudo apt-get install clang llvm`
+```bash
+sudo apt-get install clang llvm
+```
 
 #### Build sqlite3
 
@@ -25,35 +30,53 @@ cd $Schnauzer/extlibs
 
 #### Install python dependencies
 
-`cd $Schnauzer`
-`pip install -r requirements.txt`
+```bash
+cd $Schnauzer
+pip install -r requirements.txt
+```
 
 #### Set LN_CONFIG
 
-`cd $Schnauzer/logs/pbzip2-0.9.4`
+```bash
+cd $Schnauzer/logs/pbzip2-0.9.4
+```
 
-Edit LN.yaml: set `LOG_DIR=$Schnauzer/logs/pbzip2-0.9.4` and `PROJ_DIR=$Schnauzer`
+Edit LN.yaml:
+```
+LOG_DIR=$Schnauzer/logs/pbzip2-0.9.4
+```
+and
+```
+PROJ_DIR=$Schnauzer
+```
 
-`export LN_CONFIG=$Schnauzer/logs/pbzip2-0.9.4/LN.yaml`
-
-`mkdir -pv srcinfo`
+```bash
+export LN_CONFIG=$Schnauzer/logs/pbzip2-0.9.4/LN.yaml
+mkdir -pv srcinfo
+```
 
 #### Compile pbzip2
 
-`cd $Schnauzer/benchmark/pbzip2-0.9.4/pbzip2-0.9.4`
-`./COMPILE`
+```bash
+cd $Schnauzer/benchmark/pbzip2-0.9.4/pbzip2-0.9.4
+./COMPILE
+```
 
 #### Run pbzip2
 
-`cd ..`
-`./run.sh`
+```bash
+cd ..
+./run.sh
+```
 
 A lot of traces will be generated in `$Schnauzer/logs/pbzip2-0.9.4/detect`.
 
 #### Analyze traces
 
-`cd $Schnauzer`
-`./LetsGo racesum logs/pbzip2-0.9.4/detect SCS `
+```bash
+cd $Schnauzer
+./LetsGo racesum logs/pbzip2-0.9.4/detect SCS
+```
 
 ## Dependency
 * python2.7
@@ -87,10 +110,8 @@ A lot of traces will be generated in `$Schnauzer/logs/pbzip2-0.9.4/detect`.
 ```
 
 ### Note
-`root dir` means the project directory (this README lies in).
+`PROJ_DIR` means the project directory (this README lies in).
 All tools under `scripts` should be run in the root dir.
-
-
 
 ### Bugs we found
 * https://github.com/transmission/transmission/issues/409
