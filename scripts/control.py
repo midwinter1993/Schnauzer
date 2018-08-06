@@ -36,7 +36,7 @@ from docopt import docopt
 
 from utils import current_time
 from utils import Color
-from utils import ROOT_DIR
+from utils import PROJ_DIR
 
 
 def nCr(n, r):
@@ -48,7 +48,8 @@ def nPr(n, r):
     f = math.factorial
     return f(n) / f(n-r)
 
-log_file = os.path.join(ROOT_DIR, 'bak/logs', current_time() + '.log')
+log_file = os.path.join(PROJ_DIR, 'bak/logs', current_time() + '.log')
+subprocess.check_call(['mkdir', '-pv', os.path.join(PROJ_DIR, 'bak/logs')])
 logging.basicConfig(filename=log_file,
                     level=logging.DEBUG,
                     format='%(message)s')

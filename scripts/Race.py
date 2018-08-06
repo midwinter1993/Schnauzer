@@ -12,7 +12,7 @@ from utils import Color
 from utils import rm_file
 from utils import list_dir
 from utils import shell_exec
-from utils import ROOT_DIR
+from utils import PROJ_DIR
 from utils import yaml_load
 from utils import yaml_dump
 from utils import current_time
@@ -56,7 +56,7 @@ class RaceDetector(object):
             race_file = trace_file.replace('.trace', '.race')
             if not os.path.exists(race_file):
                 print 'TO detect:', trace_file
-                bin = os.path.join(ROOT_DIR, 'bin/detect')
+                bin = os.path.join(PROJ_DIR, 'bin/detect')
                 shell_exec('%s %s' % (bin, trace_file))
 
 

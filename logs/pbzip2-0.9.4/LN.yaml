@@ -1,10 +1,10 @@
 INFO:
   CTRL_THREAD: [0, 1, 2]
   DUMMY: []
-  LOG_DIR: {path-to-this-dir}
+  LOG_DIR: /tmp/Schnauzer/logs
   NAME: pbzip2-0.9.4
   NUM_THREAD: 4
-  PROJ_DIR: {path-to-Schnauzer-proj-dir}
+  PROJ_DIR: /tmp/Schnauzer
 LOGGER:
   ENABLE: true
   LOG_LIBC_MEM_OP: false
@@ -21,7 +21,7 @@ RUNTIME:
   SCHEDULER: SCS
   SEGFAULT_HANDLE: true
 SCS:
-  INIT_MONEY: [2, 16, 20, 26, 22, 21, 6, 18, 12, 32]
+  INIT_MONEY: [2, 8, 19, 2, 19, 7, 22, 27, 26, 9]
   RANDOM_MONEY: false
   RANDOM_MONEY_MAX: 500
   RANDOM_MONEY_MIN: 10

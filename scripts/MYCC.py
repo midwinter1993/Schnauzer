@@ -6,11 +6,10 @@ import sys
 import os
 
 THIS_DIR = os.path.abspath(os.path.dirname(__file__))
-ROOT_DIR = os.path.join(THIS_DIR, os.path.pardir)
-MY_LIB_DIR = os.path.join(ROOT_DIR, 'bin')
-EXT_LIB_DIR = os.path.join(ROOT_DIR, 'extlibs')
+PROJ_DIR = os.path.join(THIS_DIR, os.path.pardir)
+MY_LIB_DIR = os.path.join(PROJ_DIR, 'bin')
+EXT_LIB_DIR = os.path.join(PROJ_DIR, 'extlibs')
 
-print ROOT_DIR
 
 CFLAGS = '-Xclang -load -Xclang {0}/instrument.so -g'.format(MY_LIB_DIR)
 LDFLAGS = ('-L{0} -Wl,-rpath,{0} -lruntime '

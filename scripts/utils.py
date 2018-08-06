@@ -8,7 +8,7 @@ import os
 import yaml
 
 
-ROOT_DIR = os.path.dirname(os.path.realpath(__file__)).replace('scripts', '')
+PROJ_DIR = os.path.dirname(os.path.realpath(__file__)).replace('scripts', '')
 
 
 def yaml_load(fpath):

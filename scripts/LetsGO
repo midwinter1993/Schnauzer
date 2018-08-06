@@ -44,7 +44,7 @@ from collections import defaultdict
 from utils import list_dir
 from utils import shell_exec
 from utils import rm_file
-from utils import ROOT_DIR
+from utils import PROJ_DIR
 from utils import current_time
 from utils import yaml_load
 from utils import yaml_dump
@@ -76,8 +76,8 @@ def set_env(arguments):
         #  logs/benchmark-name/...
         idx = dirs.index('logs')
         d = '/'.join(dirs[0:idx+2])
-        os.environ['LN_CONFIG'] = os.path.join(ROOT_DIR, d, 'LN.yaml')
-        os.environ['SRCINFO_DB'] = os.path.join(ROOT_DIR, d, 'srcinfo/info.db')
+        os.environ['LN_CONFIG'] = os.path.join(PROJ_DIR, d, 'LN.yaml')
+        os.environ['SRCINFO_DB'] = os.path.join(PROJ_DIR, d, 'srcinfo/info.db')
 
 
 @cmd_table.collect
@@ -93,7 +93,7 @@ def prof_analyze(arguments):
     rm_file(os.path.join(profile_dir, 'Prace'))
     rm_file(os.path.join(profile_dir, 'InstPoint'))
 
-    bin = os.path.join(ROOT_DIR, 'bin/prof_analyze')
+    bin = os.path.join(PROJ_DIR, 'bin/prof_analyze')
     for f in list_dir(profile_dir, ext='.trace'):
         shell_exec('%s %s' % (bin, f))
 
@@ -227,7 +227,7 @@ def summary_path(detect_dir, sched):
 
 
 def check_sched(sched):
-    if sched not in ('PCT', 'SCS', 'NORMAL', 'PROFILE'):
+    if sched.upper() not in ('PCT', 'SCS', 'NORMAL', 'PROFILE'):
         print 'Unknown scheduler', sched
         return False
     return True

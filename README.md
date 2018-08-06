@@ -1,11 +1,61 @@
 Schnauzer
 ---
-## A testing tool suit for multithreaded programs.
+# A testing tool suit for multithreaded programs.
 
-### Usage
-`export LN_CONFIG` to the `LN.yaml` config file under log dir
+## Usage step by step
 
-### Dependency
+#### Clone the repo
+
+`git clone git@github.com:midwinter1993/Schnauzer.git`
+
+#### Set env variable
+
+`export Schnauzer=`pwd` `
+
+#### Install clang/llvm
+
+`sudo apt-get install clang llvm`
+
+#### Build sqlite3
+
+```bash
+cd $Schnauzer/extlibs
+./build.sh
+```
+
+#### Install python dependencies
+
+`cd $Schnauzer`
+`pip install -r requirements.txt`
+
+#### Set LN_CONFIG
+
+`cd $Schnauzer/logs/pbzip2-0.9.4`
+
+Edit LN.yaml: set `LOG_DIR=$Schnauzer/logs/pbzip2-0.9.4` and `PROJ_DIR=$Schnauzer`
+
+`export LN_CONFIG=$Schnauzer/logs/pbzip2-0.9.4/LN.yaml`
+
+`mkdir -pv srcinfo`
+
+#### Compile pbzip2
+
+`cd $Schnauzer/benchmark/pbzip2-0.9.4/pbzip2-0.9.4`
+`./COMPILE`
+
+#### Run pbzip2
+
+`cd ..`
+`./run.sh`
+
+A lot of traces will be generated in `$Schnauzer/logs/pbzip2-0.9.4/detect`.
+
+#### Analyze traces
+
+`cd $Schnauzer`
+`./LetsGo racesum logs/pbzip2-0.9.4/detect SCS `
+
+## Dependency
 * python2.7
 * sqlite3
 * LLVM-3.8
@@ -39,6 +89,8 @@ Schnauzer
 ### Note
 `root dir` means the project directory (this README lies in).
 All tools under `scripts` should be run in the root dir.
+
+
 
 ### Bugs we found
 * https://github.com/transmission/transmission/issues/409
