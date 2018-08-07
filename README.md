@@ -66,14 +66,14 @@ $ mkdir -pv srcinfo
 
 We prepare a compile script `COMPILE` which can help build the projects with autoconf.
 ```bash
-cd $Schnauzer/benchmark/pbzip2-0.9.4/pbzip2-0.9.4
-./COMPILE
+$ cd $Schnauzer/benchmark/pbzip2-0.9.4/pbzip2-0.9.4
+$ ./COMPILE
 ```
 
 Run pbzip2 with `run.sh` script:
 ```bash
-cd ..
-./run.sh
+$ cd ..
+$ ./run.sh
 ```
 
 The `run.sh` is just a wrapper of the `$Schnauzer/scripts/control.py` that samples
