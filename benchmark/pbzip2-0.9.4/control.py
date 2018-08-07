@@ -1,1 +1,0 @@
-/tmp/Schnauzer/scripts/control.py
