@@ -3,11 +3,10 @@
 """Oops
 
 Usage:
-    LetsGO prof_analyze <log_dir>
     LetsGO dlocate <race_file>
     LetsGO memcheck <mem_trace_file> <addr>
 \
-    LetsGO settle <benchmark_dir>
+    LetsGO settle <benchmark_name>
     LetsGO detect <detect_dir> <sched>
 \
     LetsGO racesum <detect_dir> <sched>
@@ -19,10 +18,6 @@ Usage:
     LetsGO plot <summary_dir>
 \
     LetsGO chglib <runtime_lib_name>
-    LetsGO check <log_dir> <race_pair>
-    LetsGO count
-    LetsGO tree
-    LetsGO ls <detect_dir>
     LetsGO (-h | --help)
     LetsGO --version
 \
@@ -32,23 +27,11 @@ Options:
 """
 
 import docopt
-import jinja2
 import re
 import os
-import stat
-import signal
-import sys
-import errno
-from collections import defaultdict
 
-from utils import list_dir
-from utils import shell_exec
-from utils import rm_file
+import utils
 from utils import PROJ_DIR
-from utils import current_time
-from utils import yaml_load
-from utils import yaml_dump
-from utils import extend_list
 
 from Command import CommandTable
 
@@ -60,7 +43,6 @@ from MemTrace import MemTrace
 from SrcInfo import SrcInfoDB
 
 import matplotlib.pyplot as plt
-import subprocess
 
 cmd_table = CommandTable()
 
@@ -78,24 +60,6 @@ def set_env(arguments):
         d = '/'.join(dirs[0:idx+2])
         os.environ['LN_CONFIG'] = os.path.join(PROJ_DIR, d, 'LN.yaml')
         os.environ['SRCINFO_DB'] = os.path.join(PROJ_DIR, d, 'srcinfo/info.db')
-
-
-@cmd_table.collect
-def prof_analyze(arguments):
-    os.environ['PSET_SIZE'] = '1'
-    log_dir = arguments['<log_dir>']
-    profile_dir = os.path.join(log_dir, 'profile')
-
-    if not os.path.exists(profile_dir):
-        print 'Profile dir %s not exists' % profile_dir
-
-    rm_file(os.path.join(profile_dir, 'PCT'))
-    rm_file(os.path.join(profile_dir, 'Prace'))
-    rm_file(os.path.join(profile_dir, 'InstPoint'))
-
-    bin = os.path.join(PROJ_DIR, 'bin/prof_analyze')
-    for f in list_dir(profile_dir, ext='.trace'):
-        shell_exec('%s %s' % (bin, f))
 
 
 @cmd_table.collect
@@ -126,31 +90,6 @@ def memcheck(arguments):
         mem_trace.checkAddr(int(addr))
 
 
-@cmd_table.collect
-def count(*dummy):
-    # Count lines
-    p1 = subprocess.Popen(
-        ['find', 'analyze', 'runtime', 'common', 'llvm', '-name', '*.cpp'],
-        stdout=subprocess.PIPE)
-    p2 = subprocess.Popen(
-        ['xargs', 'grep', '-vc', '^$'],
-        stdin=p1.stdout,
-        stdout=subprocess.PIPE)
-
-    out, err = p2.communicate()
-
-    nr_lines = 0
-    for line in out.split():
-        print line
-        nr_lines += int(line.split(':')[1])
-    print '----\nTotal lines: ', nr_lines
-
-
-@cmd_table.collect
-def tree(*dummy):
-    shell_exec("tree -I 'bak|benchmarks|*.o|*.d|bin|logs'")
-
-
 def change_runtime_lib(lib_name):
     os.chdir('bin')
     lib_path = 'lib' + lib_name + '.so'
@@ -160,10 +99,10 @@ def change_runtime_lib(lib_name):
     target_lib_path = 'libruntime.so'
     if os.path.exists(target_lib_path) and os.path.islink(target_lib_path):
         print 'Update runtime lib link'
-        shell_exec('ln -sf %s %s' % (lib_path, target_lib_path))
+        utils.shell_exec('ln -sf %s %s' % (lib_path, target_lib_path))
     else:
         print 'Create runtime lib link'
-        shell_exec('ln -s %s %s' % (lib_path, target_lib_path))
+        utils.shell_exec('ln -s %s %s' % (lib_path, target_lib_path))
 
 
 @cmd_table.collect
@@ -174,41 +113,25 @@ def chglib(arguments):
 
 @cmd_table.collect
 def settle(arguments):
-    def load_template(template_path):
-        with open(template_path, 'r') as fp:
-            return jinja2.Template(fp.read())
-
-    benchmark_dir = arguments['<benchmark_dir>']
-    if benchmark_dir[-1] == '/':
-        benchmark_dir = benchmark_dir[:-1]
-    benchmark_name = benchmark_dir.split('/')[-1]
 
     PROJ_DIR = os.path.abspath(os.curdir)
     LOG_DIR = os.path.join(PROJ_DIR, 'logs')
+
+    benchmark_name = arguments['<benchmark_name>']
     benchmark_log_dir = os.path.join(LOG_DIR, benchmark_name)
-    LN_CONFIG = os.path.join(benchmark_log_dir, 'LN.yaml')
+    ln_config_path = os.path.join(benchmark_log_dir, 'LN.yaml')
 
     if not os.path.exists(benchmark_log_dir):
-        shell_exec('mkdir %s' % benchmark_log_dir)
         print 'Create benchmark log dir', benchmark_log_dir
+        utils.shell_exec('mkdir -pv %s' % benchmark_log_dir)
+        utils.shell_exec('mkdir -pv %s' % os.path.join(benchmark_log_dir,
+                                                       'srcinfo'))
 
-        with open(LN_CONFIG, 'w') as fp:
-            template = load_template(
-                os.path.join(PROJ_DIR, 'scripts/LN_config.template'))
-            fp.write(
-                template.render(
-                    BENCHMARK_NAME=benchmark_name, LOG_DIR=LOG_DIR))
-
-    compile_script = os.path.join(PROJ_DIR, 'scripts/COMPILE')
-    with open(compile_script, 'w') as fp:
-        template = load_template(
-            os.path.join(PROJ_DIR, 'scripts/COMPILE.template'))
-        fp.write(
-            template.render(PROJ_DIR=PROJ_DIR, LN_CONFIG=LN_CONFIG))
-    st = os.stat(compile_script)
-    os.chmod(compile_script, st.st_mode | stat.S_IEXEC)
-
-    shell_exec('./scripts/benchmarkSettle.sh %s' % benchmark_dir)
+        ln_config = utils.yaml_load('scripts/LN.yaml')
+        ln_config['INFO']['PROJ_DIR'] = PROJ_DIR
+        ln_config['INFO']['NAME'] = benchmark_name
+        ln_config['INFO']['LOG_DIR'] = LOG_DIR
+        utils.yaml_dump(ln_config_path, ln_config)
 
 
 def summary_path(detect_dir, sched):
@@ -247,7 +170,6 @@ def racesum(arguments):
     rf_mngr.loadTotalRaceFile(detect_dir, sched)
     rf_mngr.saveInfo(summary_path(detect_dir, sched))
 
-    #  ratio = 0.5
     #  threshold = int(len(tot_race_file) * ratio)
     threshold = 2
     #  nr_common_race = rf_mngr.filterCommonRace(threshold)
@@ -291,7 +213,7 @@ def showsum(arguments):
     plt.legend(loc='best')
 
     benchmark_name = detect_dir.split('/')[1]
-    #  plt.savefig('./bak/%s_%s_%s.png' % (current_time(), benchmark_name, sched))
+    #  plt.savefig('./bak/%s_%s_%s.png' % (utils.current_time(), benchmark_name, sched))
 
     plt.show()
 
@@ -389,11 +311,11 @@ def plot(arguments):
 
     for f in list_dir(summary_dir, ext='.tot-summary'):
             if 'PCT' in f:
-                pct_tot_summary = yaml_load(f)
+                pct_tot_summary = utils.yaml_load(f)
             elif 'SCS' in f:
-                scs_tot_summary = yaml_load(f)
+                scs_tot_summary = utils.yaml_load(f)
             elif 'NORMAL' in f:
-                normal_tot_summary = yaml_load(f)
+                normal_tot_summary = utils.yaml_load(f)
             else:
                 print f
                 assert False
@@ -427,11 +349,11 @@ def plot(arguments):
     #  plt.ylabel('# of Inst Race')
     #  plt.legend(loc='best')
 
-    #  #  plt.savefig('./plots/%s_%s_SCS-vs-PCT.png' % (current_time(), fig_name))
+    #  #  plt.savefig('./plots/%s_%s_SCS-vs-PCT.png' % (utils.current_time(), fig_name))
     #  plt.show()
     ##########################################################
 
-    with open('./plots/%s_%s.dat' % (fig_name, current_time()), 'w') as fd:
+    with open('./plots/%s_%s.dat' % (fig_name, utils.current_time()), 'w') as fd:
         s = '%5s %20s %30s %20s %30s' % ('num', 'scs-total-race',
                                          'scs-acc-distinct-race',
                                          'pct-total-race',
@@ -443,10 +365,10 @@ def plot(arguments):
                 len(pct_tot_summary['nr-total-race']),
                 len(pct_tot_summary['nr-acc-distinct-race']))
 
-        extend_list(scs_tot_summary['nr-total-race'], l)
-        extend_list(scs_tot_summary['nr-acc-distinct-race'], l)
-        extend_list(pct_tot_summary['nr-total-race'], l)
-        extend_list(pct_tot_summary['nr-acc-distinct-race'], l)
+        utils.extend_list(scs_tot_summary['nr-total-race'], l)
+        utils.extend_list(scs_tot_summary['nr-acc-distinct-race'], l)
+        utils.extend_list(pct_tot_summary['nr-total-race'], l)
+        utils.extend_list(pct_tot_summary['nr-acc-distinct-race'], l)
 
         for i in xrange(l):
             s = '%5d %20d %30d %20d %30d' % (
@@ -458,39 +380,6 @@ def plot(arguments):
             fd.write(s);
             fd.write('\n')
             #  print s
-
-
-@cmd_table.collect
-def check(arguments):
-    log_dir = arguments['<log_dir>']
-    race_pair = arguments['<race_pair>']
-
-    first, second = re.findall(r'\d+', race_pair)
-
-    target_race_file = os.path.join(log_dir, 'check/target.race')
-    with open(target_race_file, 'w') as fd:
-        fd.write('%s %s' % (first, second))
-        print 'Target: %s %s' % (first, second)
-
-    #  change_runtime_lib('check')
-
-@cmd_table.collect
-def ls(arguments):
-    detect_dir= arguments['<detect_dir>']
-    d = {
-        'SCS.trace':    0,
-        'SCS.race':     0,
-        'PCT.trace':    0,
-        'PCT.race':     0,
-        'NORMAL.trace': 0,
-        'NORMAL.race':  0
-    }
-    for f in list_dir(detect_dir):
-        for k in d:
-            if f.endswith(k):
-                d[k] += 1
-    for k, v in d.iteritems():
-        print '%-20s %d' % (k.replace('.', ' '), v)
 
 
 if __name__ == "__main__":

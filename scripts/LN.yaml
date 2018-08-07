@@ -1,10 +1,10 @@
 INFO:
   CTRL_THREAD: [0, 1, 2]
   DUMMY: []
-  LOG_DIR: /tmp/Schnauzer/logs
-  NAME: pbzip2-0.9.4
+  LOG_DIR: XXX
+  NAME: XXX
   NUM_THREAD: 4
-  PROJ_DIR: /tmp/Schnauzer
+  PROJ_DIR: YYY
 LOGGER:
   ENABLE: true
   LOG_LIBC_MEM_OP: false

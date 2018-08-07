@@ -44,22 +44,14 @@ Here, we use the `pbzip2` as an example to demonstrate the usages.
 
 First, we create a log directory to save source code information, logs and analysis results.
 ```bash
-$ mkdir -pv $Schnauzer/logs/pbzip2-0.9.4
+$ ./LetsGo settle pbzip2-0.9.4
 ```
-
-The log directory for `pbzip2` has been created beforehand, and we also put a configuration file (`LN.yaml`) in it.
+A configuration file (`LN.yaml`) is also put in the log directory.
 This `LN.yaml` is also a template for you to test other benchmarks.
-```bash
-$ cd $Schnauzer/logs/pbzip2-0.9.4
-```
 
-The LN.yaml needs some changes:
-We should set `LOG_DIR=$Schnauzer/logs/pbzip2-0.9.4` and `PROJ_DIR=$Schnauzer`
-
-Export the configuration file path and create a directory to save source information:
+Export the configuration file path:
 ```bash
 $ export LN_CONFIG=$Schnauzer/logs/pbzip2-0.9.4/LN.yaml
-$ mkdir -pv srcinfo
 ```
 
 ### Compile&Run pbzip2
