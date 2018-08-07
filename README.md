@@ -84,8 +84,8 @@ A lot of traces will be generated in `$Schnauzer/logs/pbzip2-0.9.4/detect`.
 ### Analyze traces
 
 ```bash
-cd $Schnauzer
-./LetsGo racesum logs/pbzip2-0.9.4/detect SCS
+$ cd $Schnauzer
+$ ./LetsGo racesum logs/pbzip2-0.9.4/detect SCS
 ```
 
 Explanation
