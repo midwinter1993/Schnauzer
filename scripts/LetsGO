@@ -126,6 +126,10 @@ def settle(arguments):
         utils.shell_exec('mkdir -pv %s' % benchmark_log_dir)
         utils.shell_exec('mkdir -pv %s' % os.path.join(benchmark_log_dir,
                                                        'srcinfo'))
+        utils.shell_exec('mkdir -pv %s' % os.path.join(benchmark_log_dir,
+                                                       'detect'))
+        utils.shell_exec('mkdir -pv %s' % os.path.join(benchmark_log_dir,
+                                                       'summary'))
 
         ln_config = utils.yaml_load('scripts/LN.yaml')
         ln_config['INFO']['PROJ_DIR'] = PROJ_DIR
@@ -139,7 +143,7 @@ def summary_path(detect_dir, sched):
 
     if not os.path.exists(summary_dir):
         os.makedirs(summary_dir)
-    for f in list_dir(detect_dir, ext='.race'):
+    for f in utils.list_dir(detect_dir, ext='.race'):
         # tmp: [prog_name, date, time, sched_name]
         tmp = os.path.splitext(os.path.basename(f))[0].split('_')
         if  sched is not None:
@@ -225,7 +229,7 @@ def clean(arguments):
 
     assert check_sched(sched)
 
-    for trace_file in list_dir(detect_dir, ext='.trace'):
+    for trace_file in utils.list_dir(detect_dir, ext='.trace'):
         if sched not in trace_file:
             continue
         os.remove(trace_file)
@@ -240,7 +244,7 @@ def disclean(arguments):
 
     clean(arguments)
 
-    for f in list_dir(detect_dir):
+    for f in utils.list_dir(detect_dir):
         if sched not in f:
             continue
         if f.endswith('.race') or f.endswith('.race-summary') or f.endswith('.trace'):
@@ -273,7 +277,7 @@ def racediff(arguments):
 
     pct_inst_race_set = set()
     scs_inst_race_set = set()
-    for f in list_dir(tot_race_dir, ext='.tot-race'):
+    for f in utils.list_dir(tot_race_dir, ext='.tot-race'):
         if 'PCT' in f:
             s = pct_inst_race_set
         elif 'SCS' in f:
@@ -309,7 +313,7 @@ def plot(arguments):
         arguments['<sched>'] = sched
         racesum(arguments)
 
-    for f in list_dir(summary_dir, ext='.tot-summary'):
+    for f in utils.list_dir(summary_dir, ext='.tot-summary'):
             if 'PCT' in f:
                 pct_tot_summary = utils.yaml_load(f)
             elif 'SCS' in f:

@@ -1,0 +1,8 @@
+#!/bin/bash
+
+cd $Schnauzer/extlibs
+bash ./build.sh
+
+cd $Schnauzer
+mkdir -pv bin
+make

@@ -22,19 +22,22 @@ $ sudo apt-get install clang llvm
 ```
 LLVM-3.8 is preferred.
 
-Schnauzer uses `sqlite3` as its database to store source code information;
-these information helps check which two statements form a data race during the program execution:
-```bash
-$ cd $Schnauzer/extlibs
-$ ./build.sh
-```
-
 Some python scripts are used to glue functionalities together, which depend on other python packages:
 ```bash
 $ cd $Schnauzer
 $ pip install -r requirements.txt
 ```
 Python-2.7 is preferred.
+
+### Build
+
+Schnauzer uses `sqlite3` as its database to store source code information;
+these information helps check which two statements form a data race during the program execution:
+
+We provide a wrapper script to build all, including the libs and the project:
+```bash
+$ ./build
+```
 
 Use Schnauzer
 -------------
@@ -71,7 +74,7 @@ $ ./run.sh
 The `run.sh` is just a wrapper of the `$Schnauzer/scripts/control.py` that samples
 execution speeds systematically and execute the program.
 
-A lot of traces will be generated in `$Schnauzer/logs/pbzip2-0.9.4/detect`.
+It takes time and lots of traces will be generated in `$Schnauzer/logs/pbzip2-0.9.4/detect`.
 
 ### Analyze traces
 
